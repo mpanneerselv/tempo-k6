@@ -1,0 +1,22 @@
+# Node & npm
+node_modules/
+package-lock.json
+
+# TypeScript builds
+dist/
+*.tsbuildinfo
+
+# k6 reports
+*.json
+*.html
+
+# Editor / OS
+.vscode/
+.DS_Store
+*.swp
+
+# Secrets & certs
+certs/
+*.pem
+*.key
+.env
