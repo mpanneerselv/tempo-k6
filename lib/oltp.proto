@@ -1,0 +1,43 @@
+// lib/otlp.proto
+syntax = "proto3";
+
+package opentelemetry.proto.resource.v1;
+message Resource {
+  repeated KeyValue attributes = 1;
+}
+
+package opentelemetry.proto.common.v1;
+message KeyValue {
+  string key = 1;
+  AnyValue value = 2;
+  message AnyValue {
+    oneof value {
+      string string_value = 1;
+      int64 int_value = 4;
+    }
+  }
+}
+
+package opentelemetry.proto.trace.v1;
+message Span {
+  bytes trace_id = 1;
+  bytes span_id = 2;
+  string name = 3;
+  int32 kind = 4;
+  fixed64 start_time_unix_nano = 7;
+  fixed64 end_time_unix_nano = 8;
+  repeated opentelemetry.proto.common.v1.KeyValue attributes = 10;
+}
+
+message ScopeSpans {
+  repeated Span spans = 2;
+}
+
+message ResourceSpans {
+  opentelemetry.proto.resource.v1.Resource resource = 1;
+  repeated ScopeSpans scope_spans = 2;
+}
+
+message ExportTraceServiceRequest {
+  repeated ResourceSpans resource_spans = 1;
+}
