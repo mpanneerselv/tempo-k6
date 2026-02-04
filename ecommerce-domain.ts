@@ -26,6 +26,9 @@ const client = new tracing.Client({
     insecure: true,
 });
 
+// Entropy Pool for high-performance payload generation (5MB noise)
+const ENTROPY_POOL = randomString(5 * 1024 * 1024, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+');
+
 // Helper to calculate VUs based on rate (Assuming worst case 1s latency for safety)
 const calculateVUs = (targetRate) => Math.ceil(targetRate * 2);
 
@@ -212,28 +215,23 @@ export function runBrowseJourney() {
     const edgeSpan = generator.startSpan("GET /products", region, "server");
     const gatewaySpan = generator.childSpan(edgeSpan, "proxy-request", SERVICES.GRAPHQL_GATEWAY, "server");
     
-    // Auth & Personalization
     const authSpan = generator.childSpan(gatewaySpan, "ValidateSession", SERVICES.AUTH, "rpc");
     generator.childSpan(authSpan, "GET session", SERVICES.SESSION_STORE, "db", { "db.system": "valkey" });
     const bffSpan = generator.childSpan(gatewaySpan, "HydrateView", SERVICES.WEB_BFF, "rpc");
     
-    // Fan Out: Ads & Recs
     const recSpan = generator.childSpan(bffSpan, "GetRecommendations", SERVICES.RECOMMENDATION, "rpc");
-    generator.childSpan(recSpan, "fetch-features", SERVICES.FEATURE_STORE, "rpc"); // ML Feature Store
+    generator.childSpan(recSpan, "fetch-features", SERVICES.FEATURE_STORE, "rpc");
     generator.childSpan(recSpan, "query-vector", SERVICES.ELASTICSEARCH, "db");
 
-    // Fan Out: Ads (Cross Link)
     const adSpan = generator.childSpan(bffSpan, "InjectAds", SERVICES.AD_SERVER, "rpc");
     generator.childSpan(adSpan, "check-segments", SERVICES.USER_SEGMENTATION, "rpc");
     
-    // Core Catalog
     const searchSpan = generator.childSpan(gatewaySpan, "SearchQuery", SERVICES.SEARCH_ENGINE, "rpc");
-    generator.childSpan(searchSpan, "translate-query", SERVICES.TRANSLATION_SVC, "rpc"); // Localization
+    generator.childSpan(searchSpan, "translate-query", SERVICES.TRANSLATION_SVC, "rpc");
     
     const catSpan = generator.childSpan(searchSpan, "FetchDetails", SERVICES.CATALOG_READ, "rpc");
     generator.childSpan(catSpan, "find-one", SERVICES.DB_MONGO_CATALOG, "db", { "db.system": "mongodb" });
     
-    // Media
     const mediaSpan = generator.childSpan(catSpan, "GetMedia", SERVICES.IMAGE_RESIZER, "rpc");
     generator.childSpan(mediaSpan, "transcode-preview", SERVICES.VIDEO_TRANSCODER, "rpc");
     generator.childSpan(mediaSpan, "s3-get", SERVICES.S3_STORAGE, "client");
@@ -246,16 +244,13 @@ export function runCheckoutJourney() {
     const root = generator.startSpan("POST /checkout", SERVICES.API_GATEWAY, "server");
     const checkoutSpan = generator.childSpan(root, "OrchestrateOrder", SERVICES.CHECKOUT, "rpc");
     
-    // Geo IP & Tax
     generator.childSpan(checkoutSpan, "ResolveLocation", SERVICES.GEO_IP_SVC, "rpc");
     const taxSvc = Math.random() > 0.5 ? SERVICES.TAX_CALCULATOR_US : SERVICES.TAX_CALCULATOR_EU;
     generator.childSpan(checkoutSpan, "CalcTax", taxSvc, "rpc");
 
-    // Payment Logic
     const paySpan = generator.childSpan(checkoutSpan, "ProcessPayment", SERVICES.PAYMENT_GATEWAY, "rpc");
     generator.childSpan(paySpan, "FraudCheck", SERVICES.FRAUD_DETECTOR, "rpc");
     
-    // Complex Payment Methods
     const pMethod = Math.random();
     if (pMethod < 0.2) {
         generator.childSpan(paySpan, "RedeemGiftCard", SERVICES.GIFT_CARD_SVC, "rpc");
@@ -266,15 +261,12 @@ export function runCheckoutJourney() {
         generator.childSpan(paySpan, "ChargeCard", SERVICES.STRIPE_MOCK, "client");
     }
     
-    // Currency Conversion
     generator.childSpan(paySpan, "ConvertFx", SERVICES.CURRENCY_CONVERTER, "rpc");
 
-    // Async Finalization
     const msgSpan = generator.childSpan(checkoutSpan, "publish-order", SERVICES.MSG_KAFKA, "producer");
     const procSpan = generator.childSpan(msgSpan, "process-order", SERVICES.ORDER_PROCESSOR, "consumer");
     generator.childSpan(procSpan, "Archive", SERVICES.DB_CASSANDRA_HISTORY, "db");
     
-    // Logistics
     const fulfillSpan = generator.childSpan(procSpan, "AssignFulfillment", SERVICES.FULFILLMENT, "rpc");
     generator.childSpan(fulfillSpan, "RouteOptimize", SERVICES.ROUTE_OPTIMIZER, "rpc");
     generator.childSpan(fulfillSpan, "NotifyDrone", SERVICES.DRONE_FLEET, "rpc");
@@ -287,7 +279,6 @@ export function runLoginJourney() {
     const root = generator.startSpan("POST /login", SERVICES.MOBILE_BFF, "server");
     const authSpan = generator.childSpan(root, "Authenticate", SERVICES.AUTH, "rpc");
     
-    // Social Login
     if (Math.random() > 0.7) {
         generator.childSpan(authSpan, "SocialOauth", SERVICES.SOCIAL_LOGIN, "rpc");
         generator.childSpan(authSpan, "ImportGraph", SERVICES.DB_NEO4J_SOCIAL, "db");
@@ -295,7 +286,6 @@ export function runLoginJourney() {
 
     generator.childSpan(authSpan, "CheckPolicies", SERVICES.RBAC_POLICY, "rpc");
     
-    // MFA
     const mfaSpan = generator.childSpan(authSpan, "ChallengeMFA", SERVICES.MFA_PROVIDER, "rpc");
     generator.childSpan(mfaSpan, "SendSMS", SERVICES.SMS_SENDER, "client");
 
@@ -311,18 +301,15 @@ export function runInventorySync() {
     
     const ingestSpan = generator.childSpan(root, "consume-update", SERVICES.MSG_KAFKA, "consumer");
     
-    // Update Global Inventory
     const euSpan = generator.childSpan(ingestSpan, "UpdateEU", SERVICES.INVENTORY_SHARD_EU, "rpc");
     generator.childSpan(euSpan, "UPDATE db", SERVICES.DB_POSTGRES_PRIMARY, "db");
     
     const apacSpan = generator.childSpan(ingestSpan, "UpdateAPAC", SERVICES.INVENTORY_SHARD_APAC, "rpc");
     generator.childSpan(apacSpan, "UPDATE db", SERVICES.DB_POSTGRES_PRIMARY, "db");
 
-    // Invalidate Caches
     generator.childSpan(ingestSpan, "PurgeCache", SERVICES.CACHE_MEMCACHED, "db", { "db.system": "memcached" });
     generator.childSpan(ingestSpan, "PurgeCDN", SERVICES.CDN_EDGE_EU, "rpc");
 
-    // Data Engineering (ETL)
     const etlSpan = generator.childSpan(ingestSpan, "TriggerETL", SERVICES.ETL_WORKER, "consumer");
     generator.childSpan(etlSpan, "WriteLake", SERVICES.DATA_LAKE_INGEST, "rpc");
 
@@ -334,7 +321,6 @@ export function runReturnJourney() {
     const root = generator.startSpan("POST /returns", SERVICES.WEB_BFF, "server");
     const historySpan = generator.childSpan(root, "CheckStatus", SERVICES.ORDER_HISTORY, "rpc");
     
-    // Sentiment Analysis on Reason
     generator.childSpan(root, "AnalyzeReason", SERVICES.SENTIMENT_ANALYSIS, "rpc");
 
     const paySpan = generator.childSpan(root, "Refund", SERVICES.PAYMENT_GATEWAY, "rpc");
@@ -350,12 +336,10 @@ export function runSupportJourney() {
     const generator = new TemplatedGenerator();
     const root = generator.startSpan("websocket-msg", SERVICES.CHAT_BOT, "server");
     
-    // AI Processing
     generator.childSpan(root, "InferIntent", SERVICES.SENTIMENT_ANALYSIS, "rpc");
     const kbSpan = generator.childSpan(root, "SearchKB", SERVICES.KNOWLEDGE_BASE, "rpc");
     generator.childSpan(kbSpan, "query-es", SERVICES.ELASTICSEARCH, "db");
 
-    // Escalation
     if (Math.random() > 0.5) {
         const agentSpan = generator.childSpan(root, "EscalateToHuman", SERVICES.AGENT_ROUTING, "rpc");
         generator.childSpan(agentSpan, "CreateTicket", SERVICES.TICKET_SYSTEM, "rpc");
@@ -368,12 +352,10 @@ export function runAdBiddingJourney() {
     const generator = new TemplatedGenerator();
     const root = generator.startSpan("bid-request", SERVICES.AD_SERVER, "server");
     
-    // High fan-out
     const segSpan = generator.childSpan(root, "GetSegments", SERVICES.USER_SEGMENTATION, "rpc");
-    generator.childSpan(segSpan, "read-profile", SERVICES.DB_CLICKHOUSE_LOGS, "db"); // Fast analytics DB
+    generator.childSpan(segSpan, "read-profile", SERVICES.DB_CLICKHOUSE_LOGS, "db"); 
 
     const bidSpan = generator.childSpan(root, "RequestBids", SERVICES.BIDDING_ENGINE, "rpc");
-    // Simulate parallel calls
     generator.childSpan(bidSpan, "PartnerA", SERVICES.PARTNER_API, "client");
     generator.childSpan(bidSpan, "PartnerB", SERVICES.PARTNER_API, "client");
     generator.childSpan(bidSpan, "CheckBudget", SERVICES.AD_INVENTORY, "rpc");
@@ -382,27 +364,28 @@ export function runAdBiddingJourney() {
 }
 
 // ==========================================
-// TEMPLATED GENERATOR (Panic-Free & Lightweight)
+// TEMPLATED GENERATOR (Panic-Free & Flat Model)
 // ==========================================
 
-// 1. The Golden Span Template
-// Contains ALL fields required by Go unmarshaller, initialized to safe empty values.
+// The Golden Span Template
+// Matches the expected fields for the Go unmarshaller in xk6-client-tracing
 const SPAN_TEMPLATE = {
     name: "",
     kind: 0,
     trace_id: "",
     span_id: "",
-    parent_span_id: "", // Go unmarshaller often prefers empty string to null/undefined
+    // parent_span_id is intentionally omitted here and only added if needed
     start_time_unix_nano: 0,
     end_time_unix_nano: 0,
-    attributes: [],
+    attributes: {}, // Simple map for JS -> Go conversion
     events: [],
     links: [],
     status: { code: 0, message: "" },
     trace_state: "",
     dropped_attributes_count: 0,
     dropped_events_count: 0,
-    dropped_links_count: 0
+    dropped_links_count: 0,
+    service_name: "" // Some xk6 versions support this top-level field
 };
 
 class TemplatedGenerator {
@@ -432,9 +415,6 @@ class TemplatedGenerator {
         // Handle Parent ID strictly
         if (parentId) {
             span.parent_span_id = parentId;
-        } else {
-            // Delete key if root (safer than null/undefined for some libs)
-            delete span.parent_span_id;
         }
 
         // Timing
@@ -444,19 +424,23 @@ class TemplatedGenerator {
         span.start_time_unix_nano = actualStart * 1000000;
         span.end_time_unix_nano = (actualStart + duration) * 1000000;
 
-        // 3. Attributes & Status (Lightweight Version)
+        // 3. Attributes & Status
         const { attributes: finalAttributes, isError } = this._generateAttributes(name, attributes);
         span.attributes = finalAttributes;
-        span.status = { code: isError ? 2 : 1, message: "" };
+        
+        // Add service name to attributes as a fallback if top-level support is missing
+        span.attributes["service.name"] = serviceName;
+        
+        // Also set top level for library mapping
+        span.service_name = serviceName;
 
-        // 4. Attach Service Name (Internal property for grouping, removed later)
-        span._service_name = serviceName;
+        span.status = { code: isError ? 2 : 1, message: "" };
 
         this.spans.push(span);
         return span; 
     }
 
-    // UPDATED: Lightweight Attribute Generation (Removed Entropy Padding)
+    // UPDATED: Lightweight Attribute Generation (Simple Map)
     _generateAttributes(spanName, baseAttributes) {
         let method = "POST";
         const upperName = spanName.toUpperCase();
@@ -468,26 +452,13 @@ class TemplatedGenerator {
         if (rand > 0.99) { status = 500; isError = true; }
         else if (rand > 0.95) { status = 400; isError = true; }
 
-        // FIX: STRICT TYPING for OTLP Attributes (Key, Value{Type})
-        const defaults = [
-            { key: "http.method", value: { stringValue: method } },
-            { key: "http.status_code", value: { intValue: status } }
-        ];
+        // FIX: Return a simple JavaScript Object Map, not an Array
+        const defaults = {
+            "http.method": method,
+            "http.status_code": status
+        };
 
-        // Helper to convert input simple object to typed array if mixed
-        const convertedBase = [];
-        for (const [k, v] of Object.entries(baseAttributes)) {
-             let val = v;
-             // Ensure strict OTLP value structure
-             if (typeof v !== 'object' || (!v.stringValue && !v.intValue && !v.boolValue)) {
-                 if (typeof v === 'string') val = { stringValue: v };
-                 if (typeof v === 'number') val = { intValue: v };
-                 if (typeof v === 'boolean') val = { boolValue: v };
-             }
-             convertedBase.push({ key: k, value: val });
-        }
-
-        const allAttributes = [...defaults, ...convertedBase];
+        const allAttributes = { ...defaults, ...baseAttributes };
         
         return { attributes: allAttributes, isError };
     }
@@ -498,40 +469,8 @@ class TemplatedGenerator {
     }
 
     // THE CRITICAL METHOD FOR CLIENT.PUSH
+    // Returns a flat list of spans. The xk6 library handles grouping.
     getTrace() {
-        const spansByService = {};
-
-        this.spans.forEach(span => {
-            const svc = span._service_name;
-            if (!spansByService[svc]) {
-                spansByService[svc] = [];
-            }
-            // Clean up internal keys before sending
-            const { _service_name, ...cleanSpan } = span;
-            
-            // Clean up parent_span_id if it matches the template default ("")
-            if (cleanSpan.parent_span_id === "") {
-                delete cleanSpan.parent_span_id;
-            }
-
-            spansByService[svc].push(cleanSpan);
-        });
-
-        return Object.keys(spansByService).map(serviceName => {
-            return {
-                resource: {
-                    attributes: [
-                        { key: "service.name", value: { stringValue: serviceName } },
-                        { key: "deployment.environment", value: { stringValue: "prod" } },
-                        { key: "k8s.cluster.name", value: { stringValue: "eks-prod-ap-southeast-2" } },
-                        { key: "host.name", value: { stringValue: `ip-10-0-${randomIntBetween(1,255)}-${randomIntBetween(1,255)}` } }
-                    ]
-                },
-                scopeSpans: [{
-                    scope: { name: "k6-load-generator", version: "1.0" },
-                    spans: spansByService[serviceName]
-                }]
-            };
-        });
+        return this.spans;
     }
 }
