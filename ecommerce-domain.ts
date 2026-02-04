@@ -15,27 +15,32 @@ const ENDPOINT = __ENV.TEMPO_ENDPOINT || 'tempo-distributor.tempo.svc.cluster.lo
 const BASE_RATE = parseInt(__ENV.RATE) || 200; 
 const TOTAL_DURATION_SEC = parseInt(__ENV.DURATION_SEC) || 1200;
 
+// Dynamic Stage Calculation (10% Ramp Up, 80% Sustain, 10% Ramp Down)
 const RAMP_TIME_SEC = Math.floor(TOTAL_DURATION_SEC * 0.1);
 const SUSTAIN_TIME_SEC = Math.floor(TOTAL_DURATION_SEC * 0.8);
 const DOWN_TIME_SEC = Math.floor(TOTAL_DURATION_SEC * 0.1);
 
+// Initialize Client
 const client = new tracing.Client({
     endpoint: ENDPOINT,
     insecure: true,
 });
 
+// Entropy Pool for high-performance payload generation (5MB noise)
 const ENTROPY_POOL = randomString(5 * 1024 * 1024, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+');
 
+// Helper to calculate VUs based on rate (Assuming worst case 1s latency for safety)
 const calculateVUs = (targetRate) => Math.ceil(targetRate * 2);
 
+// Weights for different scenarios
 const RATES = {
-    BROWSING: Math.floor(BASE_RATE * 0.50),
-    CHECKOUT: Math.floor(BASE_RATE * 0.10),
-    LOGIN:    Math.floor(BASE_RATE * 0.15),
-    INVENTORY:Math.floor(BASE_RATE * 0.05),
-    RETURNS:  Math.floor(BASE_RATE * 0.05),
-    SUPPORT:  Math.floor(BASE_RATE * 0.10),
-    ADS:      Math.floor(BASE_RATE * 0.05)
+    BROWSING: Math.floor(BASE_RATE * 0.50),  // 50%
+    CHECKOUT: Math.floor(BASE_RATE * 0.10),  // 10%
+    LOGIN:    Math.floor(BASE_RATE * 0.15),  // 15%
+    INVENTORY:Math.floor(BASE_RATE * 0.05),  // 5%
+    RETURNS:  Math.floor(BASE_RATE * 0.05),  // 5%
+    SUPPORT:  Math.floor(BASE_RATE * 0.10),  // 10% (Support Chat)
+    ADS:      Math.floor(BASE_RATE * 0.05)   // 5% (Ad Bidding)
 };
 
 export const options = {
@@ -134,41 +139,67 @@ export const options = {
     },
 };
 
+// ==========================================
+// SCALED SERVICE TOPOLOGY (100+ Services)
+// ==========================================
 const SERVICES = {
+    // 1. Edge & Gateways
     CDN_EDGE_NA: "cdn-edge-na", CDN_EDGE_EU: "cdn-edge-eu", CDN_EDGE_APAC: "cdn-edge-apac",
     WAF: "waf-security", API_GATEWAY: "api-gateway", GRAPHQL_GATEWAY: "graphql-gateway",
     MOBILE_BFF: "mobile-bff", WEB_BFF: "web-bff", PARTNER_API: "partner-api", IOT_GATEWAY: "iot-gateway",
+
+    // 2. Identity & Access
     AUTH: "auth-service", USER_PROFILE: "user-profile-svc", KYC_CHECK: "kyc-verification", 
     TOKEN_ISSUER: "token-issuer", MFA_PROVIDER: "mfa-provider", SOCIAL_LOGIN: "social-login-connector",
     RBAC_POLICY: "rbac-policy-engine", SESSION_STORE: "valkey-session-cluster",
+    
+    // 3. Catalog & Search
     CATALOG_READ: "catalog-read-svc", CATALOG_WRITE: "catalog-write-svc", SEARCH_ENGINE: "search-service", 
     IMAGE_RESIZER: "image-resizer", VIDEO_TRANSCODER: "video-transcoder", TRANSLATION_SVC: "translation-service",
     PRICE_CALCULATOR: "price-calculator", DISCOUNT_ENGINE: "discount-engine", 
     INVENTORY_SHARD_EU: "inventory-shard-eu", INVENTORY_SHARD_US: "inventory-shard-us", INVENTORY_SHARD_APAC: "inventory-shard-apac",
     REVIEWS: "review-service", RECOMMENDATION: "recommendation-ml-model",
+    
+    // 4. Checkout & Cart
     CART: "cart-service", CHECKOUT: "checkout-orchestrator", TAX_CALCULATOR_US: "tax-calculator-us", TAX_CALCULATOR_EU: "tax-calculator-eu",
     SHIPPING_ESTIMATOR: "shipping-estimator", PROMO_CODE_SVC: "promo-code-validator",
     GIFT_CARD_SVC: "gift-card-service", CURRENCY_CONVERTER: "currency-converter",
+
+    // 5. Payment & Ledger
     PAYMENT_GATEWAY: "payment-gateway", WALLET_SVC: "wallet-service", LEDGER: "ledger-service", 
     FRAUD_DETECTOR: "fraud-detection-v2", AML_CHECK: "aml-check", CREDIT_CHECK: "credit-check-bureau",
     STRIPE_MOCK: "stripe-mock", PAYPAL_MOCK: "paypal-mock", ADYEN_MOCK: "adyen-mock", BNPL_PROVIDER: "bnpl-provider",
+
+    // 6. Logistics & Fulfillment
     ORDER_PROCESSOR: "order-processor", ORDER_HISTORY: "order-history", FULFILLMENT: "fulfillment-orchestrator", 
     WAREHOUSE_ROBOTICS: "warehouse-robotics", LABEL_GENERATOR: "shipping-label-gen", 
     ROUTE_OPTIMIZER: "route-optimizer", DRIVER_APP_BFF: "driver-app-bff", DRONE_FLEET: "drone-fleet-mgr",
     FEDEX_MOCK: "fedex-mock", DHL_MOCK: "dhl-mock", UPS_MOCK: "ups-mock",
+
+    // 7. Marketing & Comms
     NOTIFICATIONS: "notification-dispatcher", EMAIL_SENDER: "email-sender-svc", SMS_SENDER: "sms-sender-svc", PUSH_SENDER: "push-sender-svc",
     LOYALTY: "loyalty-program", REWARDS: "rewards-engine", CAMPAIGN_MGR: "campaign-manager",
+    
+    // 8. Ad Tech (New)
     AD_SERVER: "ad-server-core", BIDDING_ENGINE: "realtime-bidding", USER_SEGMENTATION: "user-segmentation",
     AD_INVENTORY: "ad-inventory-db", CLICK_TRACKER: "click-tracker",
+
+    // 9. Support (New)
     CHAT_BOT: "ai-chat-bot", TICKET_SYSTEM: "support-ticket-svc", KNOWLEDGE_BASE: "knowledge-base-cms",
     AGENT_ROUTING: "agent-routing-engine", SENTIMENT_ANALYSIS: "sentiment-analysis",
+
+    // 10. Data & ML (New)
     FEATURE_STORE: "ml-feature-store", DATA_LAKE_INGEST: "data-lake-ingest", 
     ETL_WORKER: "etl-batch-worker", METRICS_AGGREGATOR: "metrics-aggregator",
+    
+    // 11. Infrastructure / DBs / Queues
     DB_POSTGRES_PRIMARY: "postgres-primary", DB_POSTGRES_ANALYTICS: "postgres-analytics", 
     DB_MONGO_CATALOG: "mongo-catalog", DB_CASSANDRA_HISTORY: "cassandra-orders", 
     DB_CLICKHOUSE_LOGS: "clickhouse-logs", DB_NEO4J_SOCIAL: "neo4j-social-graph",
     DB_TIMESCALE_IOT: "timescale-iot",
+    
     CACHE_REDIS_MAIN: "redis-cluster-main", CACHE_MEMCACHED: "memcached-shard-01", CACHE_VALKEY: "valkey-cache-eu",
+    
     MSG_KAFKA: "kafka-broker", MSG_RABBIT: "rabbitmq-worker", MSG_SQS: "sqs-mock",
     ELASTICSEARCH: "elasticsearch-cluster", S3_STORAGE: "s3-blob-storage", AUDIT_LOGGER: "audit-log-worker",
     SECRETS_MGR: "secrets-manager", GEO_IP_SVC: "geo-ip-service"
@@ -191,18 +222,21 @@ export function runBrowseJourney() {
     
     // Fan Out: Ads & Recs
     const recSpan = generator.childSpan(bffSpan, "GetRecommendations", SERVICES.RECOMMENDATION, "rpc");
-    generator.childSpan(recSpan, "fetch-features", SERVICES.FEATURE_STORE, "rpc");
+    generator.childSpan(recSpan, "fetch-features", SERVICES.FEATURE_STORE, "rpc"); // ML Feature Store
     generator.childSpan(recSpan, "query-vector", SERVICES.ELASTICSEARCH, "db");
 
+    // Fan Out: Ads (Cross Link)
     const adSpan = generator.childSpan(bffSpan, "InjectAds", SERVICES.AD_SERVER, "rpc");
     generator.childSpan(adSpan, "check-segments", SERVICES.USER_SEGMENTATION, "rpc");
     
+    // Core Catalog
     const searchSpan = generator.childSpan(gatewaySpan, "SearchQuery", SERVICES.SEARCH_ENGINE, "rpc");
-    generator.childSpan(searchSpan, "translate-query", SERVICES.TRANSLATION_SVC, "rpc");
+    generator.childSpan(searchSpan, "translate-query", SERVICES.TRANSLATION_SVC, "rpc"); // Localization
     
     const catSpan = generator.childSpan(searchSpan, "FetchDetails", SERVICES.CATALOG_READ, "rpc");
     generator.childSpan(catSpan, "find-one", SERVICES.DB_MONGO_CATALOG, "db", { "db.system": "mongodb" });
     
+    // Media
     const mediaSpan = generator.childSpan(catSpan, "GetMedia", SERVICES.IMAGE_RESIZER, "rpc");
     generator.childSpan(mediaSpan, "transcode-preview", SERVICES.VIDEO_TRANSCODER, "rpc");
     generator.childSpan(mediaSpan, "s3-get", SERVICES.S3_STORAGE, "client");
@@ -215,13 +249,16 @@ export function runCheckoutJourney() {
     const root = generator.startSpan("POST /checkout", SERVICES.API_GATEWAY, "server");
     const checkoutSpan = generator.childSpan(root, "OrchestrateOrder", SERVICES.CHECKOUT, "rpc");
     
+    // Geo IP & Tax
     generator.childSpan(checkoutSpan, "ResolveLocation", SERVICES.GEO_IP_SVC, "rpc");
     const taxSvc = Math.random() > 0.5 ? SERVICES.TAX_CALCULATOR_US : SERVICES.TAX_CALCULATOR_EU;
     generator.childSpan(checkoutSpan, "CalcTax", taxSvc, "rpc");
 
+    // Payment Logic
     const paySpan = generator.childSpan(checkoutSpan, "ProcessPayment", SERVICES.PAYMENT_GATEWAY, "rpc");
     generator.childSpan(paySpan, "FraudCheck", SERVICES.FRAUD_DETECTOR, "rpc");
     
+    // Complex Payment Methods
     const pMethod = Math.random();
     if (pMethod < 0.2) {
         generator.childSpan(paySpan, "RedeemGiftCard", SERVICES.GIFT_CARD_SVC, "rpc");
@@ -232,12 +269,15 @@ export function runCheckoutJourney() {
         generator.childSpan(paySpan, "ChargeCard", SERVICES.STRIPE_MOCK, "client");
     }
     
+    // Currency Conversion
     generator.childSpan(paySpan, "ConvertFx", SERVICES.CURRENCY_CONVERTER, "rpc");
 
+    // Async Finalization
     const msgSpan = generator.childSpan(checkoutSpan, "publish-order", SERVICES.MSG_KAFKA, "producer");
     const procSpan = generator.childSpan(msgSpan, "process-order", SERVICES.ORDER_PROCESSOR, "consumer");
     generator.childSpan(procSpan, "Archive", SERVICES.DB_CASSANDRA_HISTORY, "db");
     
+    // Logistics
     const fulfillSpan = generator.childSpan(procSpan, "AssignFulfillment", SERVICES.FULFILLMENT, "rpc");
     generator.childSpan(fulfillSpan, "RouteOptimize", SERVICES.ROUTE_OPTIMIZER, "rpc");
     generator.childSpan(fulfillSpan, "NotifyDrone", SERVICES.DRONE_FLEET, "rpc");
@@ -250,6 +290,7 @@ export function runLoginJourney() {
     const root = generator.startSpan("POST /login", SERVICES.MOBILE_BFF, "server");
     const authSpan = generator.childSpan(root, "Authenticate", SERVICES.AUTH, "rpc");
     
+    // Social Login
     if (Math.random() > 0.7) {
         generator.childSpan(authSpan, "SocialOauth", SERVICES.SOCIAL_LOGIN, "rpc");
         generator.childSpan(authSpan, "ImportGraph", SERVICES.DB_NEO4J_SOCIAL, "db");
@@ -257,6 +298,7 @@ export function runLoginJourney() {
 
     generator.childSpan(authSpan, "CheckPolicies", SERVICES.RBAC_POLICY, "rpc");
     
+    // MFA
     const mfaSpan = generator.childSpan(authSpan, "ChallengeMFA", SERVICES.MFA_PROVIDER, "rpc");
     generator.childSpan(mfaSpan, "SendSMS", SERVICES.SMS_SENDER, "client");
 
@@ -272,15 +314,18 @@ export function runInventorySync() {
     
     const ingestSpan = generator.childSpan(root, "consume-update", SERVICES.MSG_KAFKA, "consumer");
     
+    // Update Global Inventory
     const euSpan = generator.childSpan(ingestSpan, "UpdateEU", SERVICES.INVENTORY_SHARD_EU, "rpc");
     generator.childSpan(euSpan, "UPDATE db", SERVICES.DB_POSTGRES_PRIMARY, "db");
     
     const apacSpan = generator.childSpan(ingestSpan, "UpdateAPAC", SERVICES.INVENTORY_SHARD_APAC, "rpc");
     generator.childSpan(apacSpan, "UPDATE db", SERVICES.DB_POSTGRES_PRIMARY, "db");
 
+    // Invalidate Caches
     generator.childSpan(ingestSpan, "PurgeCache", SERVICES.CACHE_MEMCACHED, "db", { "db.system": "memcached" });
     generator.childSpan(ingestSpan, "PurgeCDN", SERVICES.CDN_EDGE_EU, "rpc");
 
+    // Data Engineering (ETL)
     const etlSpan = generator.childSpan(ingestSpan, "TriggerETL", SERVICES.ETL_WORKER, "consumer");
     generator.childSpan(etlSpan, "WriteLake", SERVICES.DATA_LAKE_INGEST, "rpc");
 
@@ -292,6 +337,7 @@ export function runReturnJourney() {
     const root = generator.startSpan("POST /returns", SERVICES.WEB_BFF, "server");
     const historySpan = generator.childSpan(root, "CheckStatus", SERVICES.ORDER_HISTORY, "rpc");
     
+    // Sentiment Analysis on Reason
     generator.childSpan(root, "AnalyzeReason", SERVICES.SENTIMENT_ANALYSIS, "rpc");
 
     const paySpan = generator.childSpan(root, "Refund", SERVICES.PAYMENT_GATEWAY, "rpc");
@@ -307,10 +353,12 @@ export function runSupportJourney() {
     const generator = new TraceGenerator();
     const root = generator.startSpan("websocket-msg", SERVICES.CHAT_BOT, "server");
     
+    // AI Processing
     generator.childSpan(root, "InferIntent", SERVICES.SENTIMENT_ANALYSIS, "rpc");
     const kbSpan = generator.childSpan(root, "SearchKB", SERVICES.KNOWLEDGE_BASE, "rpc");
     generator.childSpan(kbSpan, "query-es", SERVICES.ELASTICSEARCH, "db");
 
+    // Escalation
     if (Math.random() > 0.5) {
         const agentSpan = generator.childSpan(root, "EscalateToHuman", SERVICES.AGENT_ROUTING, "rpc");
         generator.childSpan(agentSpan, "CreateTicket", SERVICES.TICKET_SYSTEM, "rpc");
@@ -323,10 +371,12 @@ export function runAdBiddingJourney() {
     const generator = new TraceGenerator();
     const root = generator.startSpan("bid-request", SERVICES.AD_SERVER, "server");
     
+    // High fan-out
     const segSpan = generator.childSpan(root, "GetSegments", SERVICES.USER_SEGMENTATION, "rpc");
-    generator.childSpan(segSpan, "read-profile", SERVICES.DB_CLICKHOUSE_LOGS, "db");
+    generator.childSpan(segSpan, "read-profile", SERVICES.DB_CLICKHOUSE_LOGS, "db"); // Fast analytics DB
 
     const bidSpan = generator.childSpan(root, "RequestBids", SERVICES.BIDDING_ENGINE, "rpc");
+    // Simulate parallel calls
     generator.childSpan(bidSpan, "PartnerA", SERVICES.PARTNER_API, "client");
     generator.childSpan(bidSpan, "PartnerB", SERVICES.PARTNER_API, "client");
     generator.childSpan(bidSpan, "CheckBudget", SERVICES.AD_INVENTORY, "rpc");
@@ -335,7 +385,7 @@ export function runAdBiddingJourney() {
 }
 
 // ==========================================
-// TRACE BUILDER (Fixing the panic)
+// TRACE BUILDER (Optimized for Throughput)
 // ==========================================
 class TraceGenerator {
     constructor() {
@@ -370,18 +420,29 @@ class TraceGenerator {
             attributes: heavyAttributes, // Typed OTLP array
             kind: this._mapKind(kind),
             status: { code: isError ? 2 : 1 },
+            // SAFEGUARDS FOR GO PANICS:
+            events: [],
+            links: [],
+            trace_state: "",
+            dropped_attributes_count: 0,
+            dropped_events_count: 0,
+            dropped_links_count: 0,
             service: serviceName // Used for grouping, removed before sending if strictly needed
         };
 
         // Handle Parent ID safely. Root spans should not have 'parent_span_id' set to null.
         if (parentId) {
             span.parent_span_id = parentId;
+        } else {
+            // Explicitly undefined for root spans to avoid type confusion
+            span.parent_span_id = undefined;
         }
 
         this.spans.push(span);
         return span;
     }
 
+    // UPDATED: Generates domain-specific large attributes
     _generateHeavyAttributes(serviceName, spanName, baseAttributes) {
         let method = "POST";
         const upperName = spanName.toUpperCase();
@@ -457,8 +518,10 @@ class TraceGenerator {
             keys.push({ key: "http.response.headers_dump", size: randomIntBetween(200, 500) });
         } else if (context === "messaging") {
             keys.push({ key: "messaging.message_payload", size: randomIntBetween(500, 2500) });
+            keys.push({ key: "messaging.headers_json", size: 200 });
         } else if (context === "transaction") {
             keys.push({ key: "transaction.fraud_signals", size: randomIntBetween(1000, 2000) });
+            keys.push({ key: "transaction.cart_snapshot", size: randomIntBetween(500, 1000) });
         } else {
             keys.push({ key: "app.stack_trace", size: randomIntBetween(500, 1500) });
         }
@@ -492,6 +555,7 @@ class TraceGenerator {
                         { key: "service.name", value: { stringValue: serviceName } },
                         { key: "deployment.environment", value: { stringValue: "prod" } },
                         { key: "k8s.cluster.name", value: { stringValue: "eks-prod-ap-southeast-2" } },
+                        // Simulate random nodes for diversity
                         { key: "host.name", value: { stringValue: `ip-10-0-${randomIntBetween(1,255)}-${randomIntBetween(1,255)}` } }
                     ]
                 },
