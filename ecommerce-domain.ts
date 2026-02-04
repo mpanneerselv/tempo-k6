@@ -210,7 +210,7 @@ const SERVICES = {
 // ==========================================
 
 export function runBrowseJourney() {
-    const generator = new TemplatedGenerator();
+    const generator = new OTLPGenerator();
     const region = Math.random() > 0.5 ? SERVICES.CDN_EDGE_NA : SERVICES.CDN_EDGE_EU;
     const edgeSpan = generator.startSpan("GET /products", region, "server");
     const gatewaySpan = generator.childSpan(edgeSpan, "proxy-request", SERVICES.GRAPHQL_GATEWAY, "server");
@@ -240,7 +240,7 @@ export function runBrowseJourney() {
 }
 
 export function runCheckoutJourney() {
-    const generator = new TemplatedGenerator();
+    const generator = new OTLPGenerator();
     const root = generator.startSpan("POST /checkout", SERVICES.API_GATEWAY, "server");
     const checkoutSpan = generator.childSpan(root, "OrchestrateOrder", SERVICES.CHECKOUT, "rpc");
     
@@ -275,7 +275,7 @@ export function runCheckoutJourney() {
 }
 
 export function runLoginJourney() {
-    const generator = new TemplatedGenerator();
+    const generator = new OTLPGenerator();
     const root = generator.startSpan("POST /login", SERVICES.MOBILE_BFF, "server");
     const authSpan = generator.childSpan(root, "Authenticate", SERVICES.AUTH, "rpc");
     
@@ -295,7 +295,7 @@ export function runLoginJourney() {
 }
 
 export function runInventorySync() {
-    const generator = new TemplatedGenerator();
+    const generator = new OTLPGenerator();
     const root = generator.startSpan("iot-event", SERVICES.IOT_GATEWAY, "producer");
     generator.childSpan(root, "LogTelemetry", SERVICES.DB_TIMESCALE_IOT, "db");
     
@@ -317,7 +317,7 @@ export function runInventorySync() {
 }
 
 export function runReturnJourney() {
-    const generator = new TemplatedGenerator();
+    const generator = new OTLPGenerator();
     const root = generator.startSpan("POST /returns", SERVICES.WEB_BFF, "server");
     const historySpan = generator.childSpan(root, "CheckStatus", SERVICES.ORDER_HISTORY, "rpc");
     
@@ -333,7 +333,7 @@ export function runReturnJourney() {
 }
 
 export function runSupportJourney() {
-    const generator = new TemplatedGenerator();
+    const generator = new OTLPGenerator();
     const root = generator.startSpan("websocket-msg", SERVICES.CHAT_BOT, "server");
     
     generator.childSpan(root, "InferIntent", SERVICES.SENTIMENT_ANALYSIS, "rpc");
@@ -349,7 +349,7 @@ export function runSupportJourney() {
 }
 
 export function runAdBiddingJourney() {
-    const generator = new TemplatedGenerator();
+    const generator = new OTLPGenerator();
     const root = generator.startSpan("bid-request", SERVICES.AD_SERVER, "server");
     
     const segSpan = generator.childSpan(root, "GetSegments", SERVICES.USER_SEGMENTATION, "rpc");
@@ -364,31 +364,10 @@ export function runAdBiddingJourney() {
 }
 
 // ==========================================
-// TEMPLATED GENERATOR (Panic-Free & Flat Model)
+// OTLP GENERATOR (Strict Typing, No Panic)
 // ==========================================
 
-// The Golden Span Template
-// Matches the expected fields for the Go unmarshaller in xk6-client-tracing
-const SPAN_TEMPLATE = {
-    name: "",
-    kind: 0,
-    trace_id: "",
-    span_id: "",
-    // parent_span_id is intentionally omitted here and only added if needed
-    start_time_unix_nano: 0,
-    end_time_unix_nano: 0,
-    attributes: {}, // Simple map for JS -> Go conversion
-    events: [],
-    links: [],
-    status: { code: 0, message: "" },
-    trace_state: "",
-    dropped_attributes_count: 0,
-    dropped_events_count: 0,
-    dropped_links_count: 0,
-    service_name: "" // Some xk6 versions support this top-level field
-};
-
-class TemplatedGenerator {
+class OTLPGenerator {
     constructor() {
         this.traceId = randomString(32, '0123456789abcdef');
         this.spans = [];
@@ -399,49 +378,40 @@ class TemplatedGenerator {
     }
 
     childSpan(parentSpan, name, serviceName, kind, attributes = {}) {
-        return this._createSpan(name, serviceName, kind, attributes, parentSpan.id);
+        return this._createSpan(name, serviceName, kind, attributes, parentSpan.spanId);
     }
 
     _createSpan(name, serviceName, kind, attributes, parentId) {
-        // 1. Clone the Safe Template
-        const span = JSON.parse(JSON.stringify(SPAN_TEMPLATE));
-
-        // 2. Populate Dynamic Values
-        span.span_id = randomString(16, '0123456789abcdef');
-        span.trace_id = this.traceId;
-        span.name = name;
-        span.kind = this._mapKind(kind);
+        const spanId = randomString(16, '0123456789abcdef');
         
-        // Handle Parent ID strictly
-        if (parentId) {
-            span.parent_span_id = parentId;
-        }
-
-        // Timing
-        const startTime = Date.now();
+        // OTLP Requires NanoStrings (string encoded 64-bit int)
+        const now = Date.now();
         const duration = randomIntBetween(10, 200);
-        const actualStart = parentId ? startTime + randomIntBetween(2, 20) : startTime;
-        span.start_time_unix_nano = actualStart * 1000000;
-        span.end_time_unix_nano = (actualStart + duration) * 1000000;
-
-        // 3. Attributes & Status
-        const { attributes: finalAttributes, isError } = this._generateAttributes(name, attributes);
-        span.attributes = finalAttributes;
         
-        // Add service name to attributes as a fallback if top-level support is missing
-        span.attributes["service.name"] = serviceName;
-        
-        // Also set top level for library mapping
-        span.service_name = serviceName;
+        // Hack: Append '000000' to simulate nanoseconds since Date.now() is ms
+        const startTimeUnixNano = `${now}000000`;
+        const endTimeUnixNano = `${now + duration}000000`;
 
-        span.status = { code: isError ? 2 : 1, message: "" };
+        const { attributes: heavyAttributes, isError } = this._generateHeavyAttributes(serviceName, name, attributes);
+
+        const span = {
+            traceId: this.traceId,
+            spanId: spanId,
+            parentSpanId: parentId || undefined, // Strict undefined, not null/empty string
+            name: name,
+            kind: this._mapKind(kind),
+            startTimeUnixNano: startTimeUnixNano,
+            endTimeUnixNano: endTimeUnixNano,
+            attributes: heavyAttributes, // Typed array [ {key, value} ]
+            status: { code: isError ? 2 : 1 }, // 2=Error
+            _service_name: serviceName // Internal grouping key
+        };
 
         this.spans.push(span);
         return span; 
     }
 
-    // UPDATED: Lightweight Attribute Generation (Simple Map)
-    _generateAttributes(spanName, baseAttributes) {
+    _generateHeavyAttributes(serviceName, spanName, baseAttributes) {
         let method = "POST";
         const upperName = spanName.toUpperCase();
         if (upperName.startsWith("GET") || upperName.includes("FETCH") || upperName.includes("READ") || upperName.includes("QUERY")) method = "GET";
@@ -452,25 +422,104 @@ class TemplatedGenerator {
         if (rand > 0.99) { status = 500; isError = true; }
         else if (rand > 0.95) { status = 400; isError = true; }
 
-        // FIX: Return a simple JavaScript Object Map, not an Array
-        const defaults = {
-            "http.method": method,
-            "http.status_code": status
-        };
+        // STRICT TYPED ATTRIBUTES
+        const defaults = [
+            { key: "http.method", value: { stringValue: method } },
+            { key: "http.status_code", value: { intValue: status } }
+        ];
 
-        const allAttributes = { ...defaults, ...baseAttributes };
+        const convertedBase = [];
+        for (const [k, v] of Object.entries(baseAttributes)) {
+             let val = v;
+             // Ensure it is wrapped in { type: val }
+             if (typeof v === 'string') val = { stringValue: v };
+             else if (typeof v === 'number') val = { intValue: v };
+             else if (typeof v === 'boolean') val = { boolValue: v };
+             else if (typeof v === 'object' && !v.stringValue && !v.intValue) val = { stringValue: JSON.stringify(v) };
+             
+             convertedBase.push({ key: k, value: val });
+        }
+
+        const allAttributes = [...defaults, ...convertedBase];
+
+        // HEAVY PAYLOAD GENERATION
+        let context = "generic";
+        if (serviceName.includes("postgres") || serviceName.includes("mongo")) context = "db";
+        if (serviceName.includes("redis") || serviceName.includes("memcached")) context = "cache";
+        if (serviceName.includes("kafka") || serviceName.includes("rabbit")) context = "messaging";
+        
+        const targetSize = randomIntBetween(1024, 5120);
+        let usedSize = 0;
+
+        const contextKeys = this._getContextKeys(context, serviceName);
+        contextKeys.forEach(item => {
+            const randStart = randomIntBetween(0, ENTROPY_POOL.length - item.size);
+            const val = ENTROPY_POOL.slice(randStart, randStart + item.size);
+            allAttributes.push({ key: item.key, value: { stringValue: val } });
+            usedSize += item.size;
+        });
+
+        const remainingSize = Math.max(0, targetSize - usedSize);
+        if (remainingSize > 0) {
+            const chunkKey = `app.state.dump_chunk_0`;
+            const randStart = randomIntBetween(0, ENTROPY_POOL.length - remainingSize);
+            const val = ENTROPY_POOL.slice(randStart, randStart + remainingSize);
+            allAttributes.push({ key: chunkKey, value: { stringValue: val } });
+        }
         
         return { attributes: allAttributes, isError };
     }
 
+    _getContextKeys(context, serviceName) {
+        const keys = [];
+        if (context === "db") {
+            keys.push({ key: "db.statement", size: randomIntBetween(200, 800) });
+            keys.push({ key: "db.plan_json", size: randomIntBetween(500, 1500) });
+        } else if (context === "http") {
+            keys.push({ key: "http.request.body_raw", size: randomIntBetween(500, 2000) });
+        } else {
+            keys.push({ key: "app.stack_trace", size: randomIntBetween(500, 1500) });
+        }
+        return keys;
+    }
+
     _mapKind(kindStr) {
+        // OTLP Enums: 1=INTERNAL, 2=SERVER, 3=CLIENT, 4=PRODUCER, 5=CONSUMER
         const map = { "internal": 1, "server": 2, "client": 3, "producer": 4, "consumer": 5, "rpc": 3 };
         return map[kindStr] || 1;
     }
 
-    // THE CRITICAL METHOD FOR CLIENT.PUSH
-    // Returns a flat list of spans. The xk6 library handles grouping.
+    // THE CRITICAL METHOD: RETURNS RESOURCE SPANS
     getTrace() {
-        return this.spans;
+        const spansByService = {};
+
+        // Group spans by service name
+        this.spans.forEach(span => {
+            const svc = span._service_name;
+            if (!spansByService[svc]) {
+                spansByService[svc] = [];
+            }
+            // Create a clean copy removing internal keys
+            const { _service_name, ...cleanSpan } = span;
+            spansByService[svc].push(cleanSpan);
+        });
+
+        // Convert grouped spans to OTLP ResourceSpans structure
+        return Object.keys(spansByService).map(serviceName => {
+            return {
+                resource: {
+                    attributes: [
+                        { key: "service.name", value: { stringValue: serviceName } },
+                        { key: "deployment.environment", value: { stringValue: "prod" } },
+                        { key: "k8s.cluster.name", value: { stringValue: "eks-prod-ap-southeast-2" } },
+                        { key: "host.name", value: { stringValue: `ip-10-0-${randomIntBetween(1,255)}-${randomIntBetween(1,255)}` } }
+                    ]
+                },
+                scopeSpans: [{
+                    scope: { name: "k6-load-generator", version: "1.0" },
+                    spans: spansByService[serviceName]
+                }]
+            };
+        });
     }
 }
