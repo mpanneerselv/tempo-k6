@@ -519,4 +519,34 @@ class TraceGenerator {
         const map = { "internal": 1, "server": 2, "client": 3, "producer": 4, "consumer": 5, "rpc": 3 };
         return map[kindStr] || 1;
     }
+
+    getTrace() {
+        const spansByService = {};
+
+        this.spans.forEach(span => {
+            if (!spansByService[span.service]) {
+                spansByService[span.service] = [];
+            }
+            spansByService[span.service].push(span);
+        });
+
+        // Convert grouped spans to OTLP ResourceSpans
+        return Object.keys(spansByService).map(serviceName => {
+            return {
+                resource: {
+                    attributes: [
+                        { key: "service.name", value: { stringValue: serviceName } },
+                        { key: "deployment.environment", value: { stringValue: "prod" } },
+                        { key: "k8s.cluster.name", value: { stringValue: "eks-prod-ap-southeast-2" } },
+                        // Simulate random nodes for diversity
+                        { key: "host.name", value: { stringValue: `ip-10-0-${randomIntBetween(1,255)}-${randomIntBetween(1,255)}` } }
+                    ]
+                },
+                scopeSpans: [{
+                    scope: { name: "k6-load-generator", version: "1.0" },
+                    spans: spansByService[serviceName]
+                }]
+            };
+        });
+    }
 }
