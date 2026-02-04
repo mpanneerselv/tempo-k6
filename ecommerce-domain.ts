@@ -26,9 +26,6 @@ const client = new tracing.Client({
     insecure: true,
 });
 
-// Entropy Pool for high-performance payload generation (5MB noise)
-const ENTROPY_POOL = randomString(5 * 1024 * 1024, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+');
-
 // Helper to calculate VUs based on rate (Assuming worst case 1s latency for safety)
 const calculateVUs = (targetRate) => Math.ceil(targetRate * 2);
 
@@ -210,7 +207,7 @@ const SERVICES = {
 // ==========================================
 
 export function runBrowseJourney() {
-    const generator = new TraceGenerator();
+    const generator = new TemplatedGenerator();
     const region = Math.random() > 0.5 ? SERVICES.CDN_EDGE_NA : SERVICES.CDN_EDGE_EU;
     const edgeSpan = generator.startSpan("GET /products", region, "server");
     const gatewaySpan = generator.childSpan(edgeSpan, "proxy-request", SERVICES.GRAPHQL_GATEWAY, "server");
@@ -245,7 +242,7 @@ export function runBrowseJourney() {
 }
 
 export function runCheckoutJourney() {
-    const generator = new TraceGenerator();
+    const generator = new TemplatedGenerator();
     const root = generator.startSpan("POST /checkout", SERVICES.API_GATEWAY, "server");
     const checkoutSpan = generator.childSpan(root, "OrchestrateOrder", SERVICES.CHECKOUT, "rpc");
     
@@ -286,7 +283,7 @@ export function runCheckoutJourney() {
 }
 
 export function runLoginJourney() {
-    const generator = new TraceGenerator();
+    const generator = new TemplatedGenerator();
     const root = generator.startSpan("POST /login", SERVICES.MOBILE_BFF, "server");
     const authSpan = generator.childSpan(root, "Authenticate", SERVICES.AUTH, "rpc");
     
@@ -308,7 +305,7 @@ export function runLoginJourney() {
 }
 
 export function runInventorySync() {
-    const generator = new TraceGenerator();
+    const generator = new TemplatedGenerator();
     const root = generator.startSpan("iot-event", SERVICES.IOT_GATEWAY, "producer");
     generator.childSpan(root, "LogTelemetry", SERVICES.DB_TIMESCALE_IOT, "db");
     
@@ -333,7 +330,7 @@ export function runInventorySync() {
 }
 
 export function runReturnJourney() {
-    const generator = new TraceGenerator();
+    const generator = new TemplatedGenerator();
     const root = generator.startSpan("POST /returns", SERVICES.WEB_BFF, "server");
     const historySpan = generator.childSpan(root, "CheckStatus", SERVICES.ORDER_HISTORY, "rpc");
     
@@ -350,7 +347,7 @@ export function runReturnJourney() {
 }
 
 export function runSupportJourney() {
-    const generator = new TraceGenerator();
+    const generator = new TemplatedGenerator();
     const root = generator.startSpan("websocket-msg", SERVICES.CHAT_BOT, "server");
     
     // AI Processing
@@ -368,7 +365,7 @@ export function runSupportJourney() {
 }
 
 export function runAdBiddingJourney() {
-    const generator = new TraceGenerator();
+    const generator = new TemplatedGenerator();
     const root = generator.startSpan("bid-request", SERVICES.AD_SERVER, "server");
     
     // High fan-out
@@ -385,9 +382,30 @@ export function runAdBiddingJourney() {
 }
 
 // ==========================================
-// TRACE BUILDER (Optimized for Throughput)
+// TEMPLATED GENERATOR (Panic-Free & Lightweight)
 // ==========================================
-class TraceGenerator {
+
+// 1. The Golden Span Template
+// Contains ALL fields required by Go unmarshaller, initialized to safe empty values.
+const SPAN_TEMPLATE = {
+    name: "",
+    kind: 0,
+    trace_id: "",
+    span_id: "",
+    parent_span_id: "", // Go unmarshaller often prefers empty string to null/undefined
+    start_time_unix_nano: 0,
+    end_time_unix_nano: 0,
+    attributes: [],
+    events: [],
+    links: [],
+    status: { code: 0, message: "" },
+    trace_state: "",
+    dropped_attributes_count: 0,
+    dropped_events_count: 0,
+    dropped_links_count: 0
+};
+
+class TemplatedGenerator {
     constructor() {
         this.traceId = randomString(32, '0123456789abcdef');
         this.spans = [];
@@ -402,48 +420,44 @@ class TraceGenerator {
     }
 
     _createSpan(name, serviceName, kind, attributes, parentId) {
-        const spanId = randomString(16, '0123456789abcdef');
-        const startTime = Date.now();
-        const duration = randomIntBetween(10, 200);
-        const actualStart = parentId ? startTime + randomIntBetween(2, 20) : startTime;
+        // 1. Clone the Safe Template
+        const span = JSON.parse(JSON.stringify(SPAN_TEMPLATE));
 
-        const { attributes: heavyAttributes, isError } = this._generateHeavyAttributes(serviceName, name, attributes);
-
-        // FIX: The library expects specific structure. 
-        // We will construct the internal span object here, but getTrace will group them.
-        const span = {
-            name: name,
-            id: spanId,
-            trace_id: this.traceId,
-            start_time_unix_nano: actualStart * 1000000,
-            end_time_unix_nano: (actualStart + duration) * 1000000,
-            attributes: heavyAttributes, // Typed OTLP array
-            kind: this._mapKind(kind),
-            status: { code: isError ? 2 : 1 },
-            // SAFEGUARDS FOR GO PANICS:
-            events: [],
-            links: [],
-            trace_state: "",
-            dropped_attributes_count: 0,
-            dropped_events_count: 0,
-            dropped_links_count: 0,
-            service: serviceName // Used for grouping, removed before sending if strictly needed
-        };
-
-        // Handle Parent ID safely. Root spans should not have 'parent_span_id' set to null.
+        // 2. Populate Dynamic Values
+        span.span_id = randomString(16, '0123456789abcdef');
+        span.trace_id = this.traceId;
+        span.name = name;
+        span.kind = this._mapKind(kind);
+        
+        // Handle Parent ID strictly
         if (parentId) {
             span.parent_span_id = parentId;
         } else {
-            // Explicitly undefined for root spans to avoid type confusion
-            span.parent_span_id = undefined;
+            // Delete key if root (safer than null/undefined for some libs)
+            delete span.parent_span_id;
         }
 
+        // Timing
+        const startTime = Date.now();
+        const duration = randomIntBetween(10, 200);
+        const actualStart = parentId ? startTime + randomIntBetween(2, 20) : startTime;
+        span.start_time_unix_nano = actualStart * 1000000;
+        span.end_time_unix_nano = (actualStart + duration) * 1000000;
+
+        // 3. Attributes & Status (Lightweight Version)
+        const { attributes: finalAttributes, isError } = this._generateAttributes(name, attributes);
+        span.attributes = finalAttributes;
+        span.status = { code: isError ? 2 : 1, message: "" };
+
+        // 4. Attach Service Name (Internal property for grouping, removed later)
+        span._service_name = serviceName;
+
         this.spans.push(span);
-        return span;
+        return span; 
     }
 
-    // UPDATED: Generates domain-specific large attributes
-    _generateHeavyAttributes(serviceName, spanName, baseAttributes) {
+    // UPDATED: Lightweight Attribute Generation (Removed Entropy Padding)
+    _generateAttributes(spanName, baseAttributes) {
         let method = "POST";
         const upperName = spanName.toUpperCase();
         if (upperName.startsWith("GET") || upperName.includes("FETCH") || upperName.includes("READ") || upperName.includes("QUERY")) method = "GET";
@@ -463,8 +477,8 @@ class TraceGenerator {
         // Helper to convert input simple object to typed array if mixed
         const convertedBase = [];
         for (const [k, v] of Object.entries(baseAttributes)) {
-             // If user passed typed object, keep it. Else wrap it.
              let val = v;
+             // Ensure strict OTLP value structure
              if (typeof v !== 'object' || (!v.stringValue && !v.intValue && !v.boolValue)) {
                  if (typeof v === 'string') val = { stringValue: v };
                  if (typeof v === 'number') val = { intValue: v };
@@ -474,58 +488,8 @@ class TraceGenerator {
         }
 
         const allAttributes = [...defaults, ...convertedBase];
-
-        // Determine context
-        let context = "generic";
-        if (serviceName.includes("postgres") || serviceName.includes("mongo") || serviceName.includes("cassandra") || serviceName.includes("clickhouse")) context = "db";
-        if (serviceName.includes("redis") || serviceName.includes("memcached") || serviceName.includes("valkey")) context = "cache";
-        if (serviceName.includes("kafka") || serviceName.includes("rabbit") || serviceName.includes("sqs")) context = "messaging";
-        if (serviceName.includes("gateway") || serviceName.includes("bff") || serviceName.includes("waf")) context = "http";
-        if (serviceName.includes("payment") || serviceName.includes("checkout") || serviceName.includes("fraud")) context = "transaction";
-
-        // Generate Heavy Payload
-        const targetSize = randomIntBetween(1024, 5120);
-        let usedSize = 0;
-
-        const contextKeys = this._getContextKeys(context, serviceName);
-        contextKeys.forEach(item => {
-            const randStart = randomIntBetween(0, ENTROPY_POOL.length - item.size);
-            const val = ENTROPY_POOL.slice(randStart, randStart + item.size);
-            allAttributes.push({ key: item.key, value: { stringValue: val } });
-            usedSize += item.size;
-        });
-
-        // Fill remainder
-        const remainingSize = Math.max(0, targetSize - usedSize);
-        if (remainingSize > 0) {
-            const chunkKey = `app.state.dump_chunk_0`;
-            const randStart = randomIntBetween(0, ENTROPY_POOL.length - remainingSize);
-            const val = ENTROPY_POOL.slice(randStart, randStart + remainingSize);
-            allAttributes.push({ key: chunkKey, value: { stringValue: val } });
-        }
         
         return { attributes: allAttributes, isError };
-    }
-
-    _getContextKeys(context, serviceName) {
-        // Return definitions for heavy keys
-        const keys = [];
-        if (context === "db") {
-            keys.push({ key: "db.statement", size: randomIntBetween(200, 800) });
-            keys.push({ key: "db.plan_json", size: randomIntBetween(500, 1500) });
-        } else if (context === "http") {
-            keys.push({ key: "http.request.body_raw", size: randomIntBetween(500, 2000) });
-            keys.push({ key: "http.response.headers_dump", size: randomIntBetween(200, 500) });
-        } else if (context === "messaging") {
-            keys.push({ key: "messaging.message_payload", size: randomIntBetween(500, 2500) });
-            keys.push({ key: "messaging.headers_json", size: 200 });
-        } else if (context === "transaction") {
-            keys.push({ key: "transaction.fraud_signals", size: randomIntBetween(1000, 2000) });
-            keys.push({ key: "transaction.cart_snapshot", size: randomIntBetween(500, 1000) });
-        } else {
-            keys.push({ key: "app.stack_trace", size: randomIntBetween(500, 1500) });
-        }
-        return keys;
     }
 
     _mapKind(kindStr) {
@@ -534,20 +498,25 @@ class TraceGenerator {
     }
 
     // THE CRITICAL METHOD FOR CLIENT.PUSH
-    // Groups spans into OTLP ResourceSpans structure to avoid Go panics
     getTrace() {
         const spansByService = {};
 
         this.spans.forEach(span => {
-            if (!spansByService[span.service]) {
-                spansByService[span.service] = [];
+            const svc = span._service_name;
+            if (!spansByService[svc]) {
+                spansByService[svc] = [];
             }
-            // Create a clean copy of the span for export, removing the internal 'service' key
-            const { service, ...cleanSpan } = span;
-            spansByService[span.service].push(cleanSpan);
+            // Clean up internal keys before sending
+            const { _service_name, ...cleanSpan } = span;
+            
+            // Clean up parent_span_id if it matches the template default ("")
+            if (cleanSpan.parent_span_id === "") {
+                delete cleanSpan.parent_span_id;
+            }
+
+            spansByService[svc].push(cleanSpan);
         });
 
-        // Convert grouped spans to OTLP ResourceSpans
         return Object.keys(spansByService).map(serviceName => {
             return {
                 resource: {
@@ -555,7 +524,6 @@ class TraceGenerator {
                         { key: "service.name", value: { stringValue: serviceName } },
                         { key: "deployment.environment", value: { stringValue: "prod" } },
                         { key: "k8s.cluster.name", value: { stringValue: "eks-prod-ap-southeast-2" } },
-                        // Simulate random nodes for diversity
                         { key: "host.name", value: { stringValue: `ip-10-0-${randomIntBetween(1,255)}-${randomIntBetween(1,255)}` } }
                     ]
                 },
