@@ -1,4 +1,4 @@
-import * as tracing from 'k6/x/tracing;;
+import * as tracing from 'k6/x/tracing';
 import { sleep } from 'k6';
 import { randomIntBetween } from 'https://jslib.k6.io/k6-utils/1.4.0/index.js';
 
@@ -261,6 +261,14 @@ export default function () {
     },
     spans: scenario.spans,
   };
+
+  console.log(`Selected scenario: ${scenario.name}`);
+ scenario.spans.forEach((span, idx) => {
+  console.log(`Span ${idx}: ${span.name || span.service}  parentIdx=${span.parentIdx}`);
+  if (span.parentIdx >= idx && span.parentIdx !== -1) {
+    console.log(`!!! INVALID: span ${idx} has parentIdx ${span.parentIdx} which is >= own index`);
+  }
+});
 
   const gen = new tracing.TemplatedGenerator(template);
   const traces = gen.traces();
