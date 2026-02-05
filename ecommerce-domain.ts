@@ -143,157 +143,157 @@ const scenarios = [
   {
     name: 'user_registration',
     spans: [
-      createSpan('frontend-service', 'http.post /register', -1, tracing.SEMANTICS_HTTP, 'POST', 'register'),
-      createSpan('api-gateway-service', 'rpc.call auth', 0, tracing.SEMANTICS_RPC, 'POST', 'auth/register'),
-      createSpan('auth-service', 'db.insert users', 1, tracing.SEMANTICS_DB, 'POST', 'users'),
-      createSpan('user-service', 'db.insert profiles', 1, tracing.SEMANTICS_DB, 'POST', 'profiles'), // Branch
-      createSpan('cache-service', 'cache.set user', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'cache/user'), // Branch
-      createSpan('notification-service', 'messaging.send welcome_email', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'emails/welcome'),
-      createSpan('email-service', 'http.post smtp', 5, tracing.SEMANTICS_HTTP, 'POST', 'smtp/send'),
-      createSpan('logging-service', 'db.log event', 1, tracing.SEMANTICS_DB, 'POST', 'logs'), // Branch for auditing
+      createSpan('frontend-service', 'http.post /register', -1, tracing.SEMANTICS_HTTP, 'POST', 'register'), // 0
+      createSpan('api-gateway-service', 'rpc.call auth', 0, tracing.SEMANTICS_RPC, 'POST', 'auth/register'), // 1
+      createSpan('auth-service', 'db.insert users', 1, tracing.SEMANTICS_DB, 'POST', 'users'), // 2
+      createSpan('user-service', 'db.insert profiles', 1, tracing.SEMANTICS_DB, 'POST', 'profiles'), // 3 ← branch from 1
+      createSpan('cache-service', 'cache.set user', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'cache/user'), // 4 ← branch from 1
+      createSpan('notification-service', 'messaging.send welcome_email', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'emails/welcome'), // 5 ← branch from 1
+      createSpan('email-service', 'http.post smtp', 5, tracing.SEMANTICS_HTTP, 'POST', 'smtp/send'), // 6 ← child of 5
+      createSpan('logging-service', 'db.log event', 1, tracing.SEMANTICS_DB, 'POST', 'logs'), // 7 ← branch from 1
     ],
   },
   // 2. User Login
   {
     name: 'user_login',
     spans: [
-      createSpan('frontend-service', 'http.post /login', -1, tracing.SEMANTICS_HTTP, 'POST', 'login'),
-      createSpan('api-gateway-service', 'rpc.call auth', 0, tracing.SEMANTICS_RPC, 'POST', 'auth/login'),
-      createSpan('auth-service', 'db.query users', 1, tracing.SEMANTICS_DB, 'GET', 'users'),
-      createSpan('session-service', 'cache.set session', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'sessions'),
-      createSpan('analytics-service', 'messaging.track login', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/login'),
-      createSpan('logging-service', 'db.log event', 1, tracing.SEMANTICS_DB, 'POST', 'logs'),
+      createSpan('frontend-service', 'http.post /login', -1, tracing.SEMANTICS_HTTP, 'POST', 'login'), // 0
+      createSpan('api-gateway-service', 'rpc.call auth', 0, tracing.SEMANTICS_RPC, 'POST', 'auth/login'), // 1
+      createSpan('auth-service', 'db.query users', 1, tracing.SEMANTICS_DB, 'GET', 'users'), // 2
+      createSpan('session-service', 'cache.set session', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'sessions'), // 3
+      createSpan('analytics-service', 'messaging.track login', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/login'), // 4
+      createSpan('logging-service', 'db.log event', 1, tracing.SEMANTICS_DB, 'POST', 'logs'), // 5
     ],
   },
   // 3. Product Search
   {
     name: 'product_search',
     spans: [
-      createSpan('frontend-service', 'http.get /search', -1, tracing.SEMANTICS_HTTP, 'GET', 'search'),
-      createSpan('api-gateway-service', 'rpc.call search', 0, tracing.SEMANTICS_RPC, 'GET', 'search/query'),
-      createSpan('search-service', 'db.query products', 1, tracing.SEMANTICS_DB, 'GET', 'products/search'),
-      createSpan('catalog-service', 'http.get categories', 1, tracing.SEMANTICS_HTTP, 'GET', 'categories'), // Branch
-      createSpan('personalization-service', 'rpc.get recommendations', 1, tracing.SEMANTICS_RPC, 'GET', 'recommendations/search'),
-      createSpan('cache-service', 'cache.get results', 1, tracing.SEMANTICS_MESSAGING, 'GET', 'cache/search'),
-      createSpan('analytics-service', 'messaging.track search', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/search'),
+      createSpan('frontend-service', 'http.get /search', -1, tracing.SEMANTICS_HTTP, 'GET', 'search'), // 0
+      createSpan('api-gateway-service', 'rpc.call search', 0, tracing.SEMANTICS_RPC, 'GET', 'search/query'), // 1
+      createSpan('search-service', 'db.query products', 1, tracing.SEMANTICS_DB, 'GET', 'products/search'), // 2
+      createSpan('catalog-service', 'http.get categories', 1, tracing.SEMANTICS_HTTP, 'GET', 'categories'), // 3 ← branch from 1
+      createSpan('personalization-service', 'rpc.get recommendations', 1, tracing.SEMANTICS_RPC, 'GET', 'recommendations/search'), // 4 ← branch from 1
+      createSpan('cache-service', 'cache.get results', 1, tracing.SEMANTICS_MESSAGING, 'GET', 'cache/search'), // 5 ← branch from 1
+      createSpan('analytics-service', 'messaging.track search', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/search'), // 6 ← branch from 1
     ],
   },
   // 4. View Product Details
   {
     name: 'view_product_details',
     spans: [
-      createSpan('frontend-service', 'http.get /product/:id', -1, tracing.SEMANTICS_HTTP, 'GET', 'product/id'),
-      createSpan('api-gateway-service', 'rpc.call product', 0, tracing.SEMANTICS_RPC, 'GET', 'product/id'),
-      createSpan('product-service', 'db.query products', 1, tracing.SEMANTICS_DB, 'GET', 'products/id'),
-      createSpan('inventory-service', 'http.get stock', 1, tracing.SEMANTICS_HTTP, 'GET', 'stock/id'), // Branch
-      createSpan('recommendation-service', 'rpc.get similar', 1, tracing.SEMANTICS_RPC, 'GET', 'recommendations/similar'),
-      createSpan('review-service', 'db.query reviews', 1, tracing.SEMANTICS_DB, 'GET', 'reviews/product_id'), // Branch
-      createSpan('image-processing-service', 'http.get images', 1, tracing.SEMANTICS_HTTP, 'GET', 'images/product_id'),
-      createSpan('analytics-service', 'messaging.track view', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/view'),
+      createSpan('frontend-service', 'http.get /product/:id', -1, tracing.SEMANTICS_HTTP, 'GET', 'product/id'), // 0
+      createSpan('api-gateway-service', 'rpc.call product', 0, tracing.SEMANTICS_RPC, 'GET', 'product/id'), // 1
+      createSpan('product-service', 'db.query products', 1, tracing.SEMANTICS_DB, 'GET', 'products/id'), // 2
+      createSpan('inventory-service', 'http.get stock', 1, tracing.SEMANTICS_HTTP, 'GET', 'stock/id'), // 3 ← branch from 1
+      createSpan('recommendation-service', 'rpc.get similar', 1, tracing.SEMANTICS_RPC, 'GET', 'recommendations/similar'), // 4 ← branch from 1
+      createSpan('review-service', 'db.query reviews', 1, tracing.SEMANTICS_DB, 'GET', 'reviews/product_id'), // 5 ← branch from 1
+      createSpan('image-processing-service', 'http.get images', 1, tracing.SEMANTICS_HTTP, 'GET', 'images/product_id'), // 6 ← branch from 1
+      createSpan('analytics-service', 'messaging.track view', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/view'), // 7 ← branch from 1
     ],
   },
   // 5. Add to Cart
   {
     name: 'add_to_cart',
     spans: [
-      createSpan('frontend-service', 'http.post /cart/add', -1, tracing.SEMANTICS_HTTP, 'POST', 'cart/add'),
-      createSpan('api-gateway-service', 'rpc.call cart', 0, tracing.SEMANTICS_RPC, 'POST', 'cart/add'),
-      createSpan('cart-service', 'db.insert cart_items', 1, tracing.SEMANTICS_DB, 'POST', 'cart/items'),
-      createSpan('inventory-service', 'http.put reserve_stock', 1, tracing.SEMANTICS_HTTP, 'PUT', 'stock/reserve'), // Branch
-      createSpan('session-service', 'cache.update cart', 1, tracing.SEMANTICS_MESSAGING, 'PUT', 'sessions/cart'),
-      createSpan('analytics-service', 'messaging.track add_to_cart', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/add_to_cart'),
-      createSpan('logging-service', 'db.log event', 1, tracing.SEMANTICS_DB, 'POST', 'logs'),
+      createSpan('frontend-service', 'http.post /cart/add', -1, tracing.SEMANTICS_HTTP, 'POST', 'cart/add'), // 0
+      createSpan('api-gateway-service', 'rpc.call cart', 0, tracing.SEMANTICS_RPC, 'POST', 'cart/add'), // 1
+      createSpan('cart-service', 'db.insert cart_items', 1, tracing.SEMANTICS_DB, 'POST', 'cart/items'), // 2
+      createSpan('inventory-service', 'http.put reserve_stock', 1, tracing.SEMANTICS_HTTP, 'PUT', 'stock/reserve'), // 3 ← branch from 1
+      createSpan('session-service', 'cache.update cart', 1, tracing.SEMANTICS_MESSAGING, 'PUT', 'sessions/cart'), // 4 ← branch from 1
+      createSpan('analytics-service', 'messaging.track add_to_cart', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/add_to_cart'), // 5 ← branch from 1
+      createSpan('logging-service', 'db.log event', 1, tracing.SEMANTICS_DB, 'POST', 'logs'), // 6 ← branch from 1
     ],
   },
   // 6. Checkout
   {
     name: 'checkout',
     spans: [
-      createSpan('frontend-service', 'http.post /checkout', -1, tracing.SEMANTICS_HTTP, 'POST', 'checkout'),
-      createSpan('api-gateway-service', 'rpc.call checkout', 0, tracing.SEMANTICS_RPC, 'POST', 'checkout/init'),
-      createSpan('checkout-service', 'db.query cart', 1, tracing.SEMANTICS_DB, 'GET', 'cart'),
-      createSpan('user-service', 'http.get addresses', 1, tracing.SEMANTICS_HTTP, 'GET', 'addresses'), // Branch
-      createSpan('tax-calculation-service', 'rpc.calculate tax', 1, tracing.SEMANTICS_RPC, 'POST', 'tax/calculate'),
-      createSpan('shipping-service', 'http.get rates', 1, tracing.SEMANTICS_HTTP, 'GET', 'shipping/rates'), // Branch
-      createSpan('coupon-service', 'db.validate coupon', 1, tracing.SEMANTICS_DB, 'GET', 'coupons/validate'),
-      createSpan('analytics-service', 'messaging.track checkout', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/checkout'),
+      createSpan('frontend-service', 'http.post /checkout', -1, tracing.SEMANTICS_HTTP, 'POST', 'checkout'), // 0
+      createSpan('api-gateway-service', 'rpc.call checkout', 0, tracing.SEMANTICS_RPC, 'POST', 'checkout/init'), // 1
+      createSpan('checkout-service', 'db.query cart', 1, tracing.SEMANTICS_DB, 'GET', 'cart'), // 2
+      createSpan('user-service', 'http.get addresses', 1, tracing.SEMANTICS_HTTP, 'GET', 'addresses'), // 3 ← branch from 1
+      createSpan('tax-calculation-service', 'rpc.calculate tax', 1, tracing.SEMANTICS_RPC, 'POST', 'tax/calculate'), // 4 ← branch from 1
+      createSpan('shipping-service', 'http.get rates', 1, tracing.SEMANTICS_HTTP, 'GET', 'shipping/rates'), // 5 ← branch from 1
+      createSpan('coupon-service', 'db.validate coupon', 1, tracing.SEMANTICS_DB, 'GET', 'coupons/validate'), // 6 ← branch from 1
+      createSpan('analytics-service', 'messaging.track checkout', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/checkout'), // 7 ← branch from 1
     ],
   },
   // 7. Payment Processing
   {
     name: 'payment_processing',
     spans: [
-      createSpan('frontend-service', 'http.post /payment', -1, tracing.SEMANTICS_HTTP, 'POST', 'payment/process'),
-      createSpan('api-gateway-service', 'rpc.call payment', 0, tracing.SEMANTICS_RPC, 'POST', 'payment/process'),
-      createSpan('payment-service', 'http.post gateway', 1, tracing.SEMANTICS_HTTP, 'POST', 'gateway/charge'),
-      createSpan('fraud-detection-service', 'rpc.check fraud', 1, tracing.SEMANTICS_RPC, 'POST', 'fraud/check'), // Branch
-      createSpan('billing-service', 'db.insert transaction', 1, tracing.SEMANTICS_DB, 'POST', 'transactions'),
-      createSpan('notification-service', 'messaging.send receipt', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'emails/receipt'),
-      createSpan('email-service', 'http.post smtp', 5, tracing.SEMANTICS_HTTP, 'POST', 'smtp/send'),
-      createSpan('analytics-service', 'messaging.track payment', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/payment'),
+      createSpan('frontend-service', 'http.post /payment', -1, tracing.SEMANTICS_HTTP, 'POST', 'payment/process'), // 0
+      createSpan('api-gateway-service', 'rpc.call payment', 0, tracing.SEMANTICS_RPC, 'POST', 'payment/process'), // 1
+      createSpan('payment-service', 'http.post gateway', 1, tracing.SEMANTICS_HTTP, 'POST', 'gateway/charge'), // 2
+      createSpan('fraud-detection-service', 'rpc.check fraud', 1, tracing.SEMANTICS_RPC, 'POST', 'fraud/check'), // 3 ← branch from 1
+      createSpan('billing-service', 'db.insert transaction', 1, tracing.SEMANTICS_DB, 'POST', 'transactions'), // 4 ← branch from 1
+      createSpan('notification-service', 'messaging.send receipt', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'emails/receipt'), // 5 ← branch from 1
+      createSpan('email-service', 'http.post smtp', 5, tracing.SEMANTICS_HTTP, 'POST', 'smtp/send'), // 6 ← child of 5
+      createSpan('analytics-service', 'messaging.track payment', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/payment'), // 7 ← branch from 1
     ],
   },
   // 8. Order Fulfillment
   {
     name: 'order_fulfillment',
     spans: [
-      createSpan('order-service', 'http.post /fulfill', -1, tracing.SEMANTICS_HTTP, 'POST', 'orders/fulfill'), // Triggered by event
-      createSpan('warehouse-service', 'rpc.pick items', 0, tracing.SEMANTICS_RPC, 'POST', 'warehouse/pick'),
-      createSpan('inventory-service', 'db.update stock', 1, tracing.SEMANTICS_DB, 'PUT', 'stock/update'),
-      createSpan('shipping-service', 'http.post label', 1, tracing.SEMANTICS_HTTP, 'POST', 'shipping/label'), // Branch
-      createSpan('tracking-service', 'db.insert tracking', 1, tracing.SEMANTICS_DB, 'POST', 'tracking'),
-      createSpan('notification-service', 'messaging.send shipped', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'emails/shipped'),
-      createSpan('email-service', 'http.post smtp', 5, tracing.SEMANTICS_HTTP, 'POST', 'smtp/send'),
-      createSpan('analytics-service', 'messaging.track fulfillment', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/fulfillment'),
+      createSpan('order-service', 'http.post /fulfill', -1, tracing.SEMANTICS_HTTP, 'POST', 'orders/fulfill'), // 0
+      createSpan('warehouse-service', 'rpc.pick items', 0, tracing.SEMANTICS_RPC, 'POST', 'warehouse/pick'), // 1
+      createSpan('inventory-service', 'db.update stock', 1, tracing.SEMANTICS_DB, 'PUT', 'stock/update'), // 2 ← child of 1
+      createSpan('shipping-service', 'http.post label', 1, tracing.SEMANTICS_HTTP, 'POST', 'shipping/label'), // 3 ← branch from 1
+      createSpan('tracking-service', 'db.insert tracking', 1, tracing.SEMANTICS_DB, 'POST', 'tracking'), // 4 ← branch from 1
+      createSpan('notification-service', 'messaging.send shipped', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'emails/shipped'), // 5 ← branch from 1
+      createSpan('email-service', 'http.post smtp', 5, tracing.SEMANTICS_HTTP, 'POST', 'smtp/send'), // 6 ← child of 5
+      createSpan('analytics-service', 'messaging.track fulfillment', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/fulfillment'), // 7 ← branch from 1
     ],
   },
   // 9. View Order History
   {
     name: 'view_order_history',
     spans: [
-      createSpan('frontend-service', 'http.get /orders', -1, tracing.SEMANTICS_HTTP, 'GET', 'orders'),
-      createSpan('api-gateway-service', 'rpc.call order', 0, tracing.SEMANTICS_RPC, 'GET', 'orders/history'),
-      createSpan('order-service', 'db.query orders', 1, tracing.SEMANTICS_DB, 'GET', 'orders/user_id'),
-      createSpan('user-service', 'http.get user', 1, tracing.SEMANTICS_HTTP, 'GET', 'users/id'), // Branch
-      createSpan('tracking-service', 'db.query status', 1, tracing.SEMANTICS_DB, 'GET', 'tracking/order_id'),
-      createSpan('cache-service', 'cache.get history', 1, tracing.SEMANTICS_MESSAGING, 'GET', 'cache/orders'),
-      createSpan('analytics-service', 'messaging.track view_history', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/view_history'),
+      createSpan('frontend-service', 'http.get /orders', -1, tracing.SEMANTICS_HTTP, 'GET', 'orders'), // 0
+      createSpan('api-gateway-service', 'rpc.call order', 0, tracing.SEMANTICS_RPC, 'GET', 'orders/history'), // 1
+      createSpan('order-service', 'db.query orders', 1, tracing.SEMANTICS_DB, 'GET', 'orders/user_id'), // 2
+      createSpan('user-service', 'http.get user', 1, tracing.SEMANTICS_HTTP, 'GET', 'users/id'), // 3 ← branch from 1
+      createSpan('tracking-service', 'db.query status', 1, tracing.SEMANTICS_DB, 'GET', 'tracking/order_id'), // 4 ← branch from 1
+      createSpan('cache-service', 'cache.get history', 1, tracing.SEMANTICS_MESSAGING, 'GET', 'cache/orders'), // 5 ← branch from 1
+      createSpan('analytics-service', 'messaging.track view_history', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/view_history'), // 6 ← branch from 1
     ],
   },
   // 10. Apply Coupon
   {
     name: 'apply_coupon',
     spans: [
-      createSpan('frontend-service', 'http.post /coupon/apply', -1, tracing.SEMANTICS_HTTP, 'POST', 'coupon/apply'),
-      createSpan('api-gateway-service', 'rpc.call coupon', 0, tracing.SEMANTICS_RPC, 'POST', 'coupon/apply'),
-      createSpan('coupon-service', 'db.validate coupon', 1, tracing.SEMANTICS_DB, 'GET', 'coupons/validate'),
-      createSpan('order-service', 'http.put update_total', 1, tracing.SEMANTICS_HTTP, 'PUT', 'orders/update_total'), // Branch
-      createSpan('analytics-service', 'messaging.track coupon', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/coupon_apply'),
-      createSpan('logging-service', 'db.log event', 1, tracing.SEMANTICS_DB, 'POST', 'logs'),
+      createSpan('frontend-service', 'http.post /coupon/apply', -1, tracing.SEMANTICS_HTTP, 'POST', 'coupon/apply'), // 0
+      createSpan('api-gateway-service', 'rpc.call coupon', 0, tracing.SEMANTICS_RPC, 'POST', 'coupon/apply'), // 1
+      createSpan('coupon-service', 'db.validate coupon', 1, tracing.SEMANTICS_DB, 'GET', 'coupons/validate'), // 2
+      createSpan('order-service', 'http.put update_total', 1, tracing.SEMANTICS_HTTP, 'PUT', 'orders/update_total'), // 3 ← branch from 1
+      createSpan('analytics-service', 'messaging.track coupon', 1, tracing.SEMANTICS_MESSAGING, 'POST', 'events/coupon_apply'), // 4 ← branch from 1
+      createSpan('logging-service', 'db.log event', 1, tracing.SEMANTICS_DB, 'POST', 'logs'), // 5 ← branch from 1
     ],
   },
   // 11. Send Notification (e.g., promo)
   {
     name: 'send_notification',
     spans: [
-      createSpan('notification-service', 'http.post /notify', -1, tracing.SEMANTICS_HTTP, 'POST', 'notify/promo'), // Event-driven
-      createSpan('user-service', 'db.query subscribers', 0, tracing.SEMANTICS_DB, 'GET', 'users/subscribers'),
-      createSpan('email-service', 'http.post smtp_batch', 0, tracing.SEMANTICS_HTTP, 'POST', 'smtp/batch'), // Branch
-      createSpan('sms-service', 'http.post twilio', 0, tracing.SEMANTICS_HTTP, 'POST', 'sms/send'), // Branch
-      createSpan('analytics-service', 'messaging.track notify', 0, tracing.SEMANTICS_MESSAGING, 'POST', 'events/notify'),
-      createSpan('logging-service', 'db.log event', 0, tracing.SEMANTICS_DB, 'POST', 'logs'),
+      createSpan('notification-service', 'http.post /notify', -1, tracing.SEMANTICS_HTTP, 'POST', 'notify/promo'), // 0
+      createSpan('user-service', 'db.query subscribers', 0, tracing.SEMANTICS_DB, 'GET', 'users/subscribers'), // 1
+      createSpan('email-service', 'http.post smtp_batch', 0, tracing.SEMANTICS_HTTP, 'POST', 'smtp/batch'), // 2 ← branch from 0
+      createSpan('sms-service', 'http.post twilio', 0, tracing.SEMANTICS_HTTP, 'POST', 'sms/send'), // 3 ← branch from 0
+      createSpan('analytics-service', 'messaging.track notify', 0, tracing.SEMANTICS_MESSAGING, 'POST', 'events/notify'), // 4 ← branch from 0
+      createSpan('logging-service', 'db.log event', 0, tracing.SEMANTICS_DB, 'POST', 'logs'), // 5 ← branch from 0
     ],
   },
   // 12. Analytics Tracking (batch job)
   {
     name: 'analytics_tracking',
     spans: [
-      createSpan('analytics-service', 'batch.process events', -1, tracing.SEMANTICS_RPC, 'POST', 'analytics/process'), // Batch job
-      createSpan('logging-service', 'db.query logs', 0, tracing.SEMANTICS_DB, 'GET', 'logs/recent'),
-      createSpan('data-warehouse-service', 'db.insert metrics', 0, tracing.SEMANTICS_DB, 'POST', 'metrics'),
-      createSpan('report-service', 'http.generate report', 0, tracing.SEMANTICS_HTTP, 'POST', 'reports/generate'), // Branch
-      createSpan('monitoring-service', 'messaging.alert anomalies', 0, tracing.SEMANTICS_MESSAGING, 'POST', 'alerts/anomalies'),
-      createSpan('bi-service', 'rpc.update dashboard', 0, tracing.SEMANTICS_RPC, 'PUT', 'dashboards/update'),
+      createSpan('analytics-service', 'batch.process events', -1, tracing.SEMANTICS_RPC, 'POST', 'analytics/process'), // 0
+      createSpan('logging-service', 'db.query logs', 0, tracing.SEMANTICS_DB, 'GET', 'logs/recent'), // 1
+      createSpan('data-warehouse-service', 'db.insert metrics', 0, tracing.SEMANTICS_DB, 'POST', 'metrics'), // 2 ← branch from 0
+      createSpan('report-service', 'http.generate report', 0, tracing.SEMANTICS_HTTP, 'POST', 'reports/generate'), // 3 ← branch from 0
+      createSpan('monitoring-service', 'messaging.alert anomalies', 0, tracing.SEMANTICS_MESSAGING, 'POST', 'alerts/anomalies'), // 4 ← branch from 0
+      createSpan('bi-service', 'rpc.update dashboard', 0, tracing.SEMANTICS_RPC, 'PUT', 'dashboards/update'), // 5 ← branch from 0
     ],
   },
 ];
